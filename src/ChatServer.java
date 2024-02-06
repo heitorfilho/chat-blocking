@@ -1,10 +1,14 @@
 import java.io.IOException;
 import java.net.ServerSocket;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
 
 public class ChatServer {
 
     public static final int PORT = 4000;
     private ServerSocket serverSocket;
+    private final List<ClientSocket> clients = new LinkedList<>();
 
     public void start() throws IOException{
         serverSocket = new ServerSocket(PORT);
@@ -16,11 +20,13 @@ public class ChatServer {
         while (true) {
             ClientSocket clientSocket = new ClientSocket(serverSocket.accept()); // blocking
 
+            clients.add(clientSocket);
+
             new Thread(() -> clientMessageLoop(clientSocket)).start();
         }
     }
 
-    public void clientMessageLoop(ClientSocket clientSocket){
+    private void clientMessageLoop(ClientSocket clientSocket){
         String msg;
         try{
             while ((msg = clientSocket.getMsg()) != null) {
@@ -30,10 +36,29 @@ public class ChatServer {
                 System.out.printf("Msg recebida do cliente %s: %s\n", 
                 clientSocket.getRemoteSocketAddress(),
                 msg);
+                sendMsgToAll(clientSocket, msg);
             }
         } finally{
             clientSocket.close();
         }
+    }
+
+    private void sendMsgToAll(ClientSocket sender, String msg){
+
+        Iterator<ClientSocket> iterator = clients.iterator();
+        while (iterator.hasNext()) {
+            ClientSocket clientSocket = iterator.next();
+            if (!sender.equals(clientSocket)) {
+                if (!clientSocket.sendMsg(
+                    (clientSocket.getRemoteSocketAddress() + ": " + msg))) {
+                    iterator.remove();
+                }
+            }
+        }
+    
+        //clients.stream()
+        //.filter(client -> !client.equals(sender))
+        //.forEach(client -> client.sendMsg(msg));
     }
 
     public static void main(String[] args) {
